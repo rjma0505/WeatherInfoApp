@@ -10,5 +10,7 @@ def main():
     else:
         print("Unable to fetch forecast. Please try again later.")
 
+from presentation.gui_interface import run_gui
+
 if __name__ == "__main__":
-    main()
+    run_gui()
