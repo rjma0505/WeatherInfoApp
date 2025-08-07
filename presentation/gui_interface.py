@@ -1,14 +1,25 @@
+import sys
+import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
-import os
 from datetime import datetime, timedelta
 
 from logic.controller import fetch_forecast_by_city_name
 from data_access.ipma_api import listar_cidades
 
-# --- Traduções e Globais ---
-# Mapeamento de descrição em inglês para ficheiros de ícone
+# === Caminho compatível com PyInstaller e desenvolvimento ===
+def resource_path(relative_path):
+    """Obtém o caminho absoluto do recurso, compatível com PyInstaller e modo de desenvolvimento."""
+    try:
+        base_path = sys._MEIPASS  # Usado quando empacotado com PyInstaller
+    except AttributeError:
+        base_path = os.path.abspath(".")  # Modo de desenvolvimento (VS Code, etc.)
+    return os.path.join(base_path, relative_path)
+
+
+# === Constantes ===
 ICON_MAP = {
     "Clear sky": "clear.png",
     "Partly cloudy": "partly_cloudy.png",
@@ -20,9 +31,6 @@ ICON_MAP = {
     "Thunderstorm": "storm.png"
 }
 
-ICON_FOLDER = os.path.join("assets", "weather_icons")
-
-# Estrutura para traduções
 TRANSLATIONS = {
     "pt": {
         "app_title": "Previsão do Tempo",
@@ -74,7 +82,6 @@ TRANSLATIONS = {
     }
 }
 
-# Temas da aplicação
 THEMES = {
     "light": {
         "bg": "#F0F0F0",
@@ -102,41 +109,31 @@ THEMES = {
     }
 }
 
-# Declaração das variáveis globais
 current_language = "pt"
 current_theme_name = "light"
 
-# Variáveis globais para os widgets
-root = None
-style = None
-title_label = None
-dropdown = None
-icon_label = None
-forecast_label = None
-nav_frame = None
-btn_anterior = None
-btn_seguinte = None
-botao = None
-copyright_label = None
-theme_frame = None
-theme_slider = None
-language_frame = None
-language_slider = None
-day_index = None
-forecast_data = []
+# === Variáveis globais da interface ===
+root = style = title_label = dropdown = top_frame = icon_label = forecast_label = nav_frame = None
+btn_anterior = btn_seguinte = botao = copyright_label = theme_frame = theme_slider = language_frame = None
+day_index = forecast_data = language_dropdown = None
 
+
+# === Carregamento da imagem do ícone ===
 def get_icon_image(description):
     filename = ICON_MAP.get(description, "unknown.png")
-    path = os.path.join(ICON_FOLDER, filename)
+    relative_path = os.path.join("assets", "weather_icons", filename)
+    path = resource_path(relative_path)
     try:
         img = Image.open(path)
         img = img.resize((80, 80), Image.LANCZOS)
         return ImageTk.PhotoImage(img)
     except Exception as e:
-        print(f"Erro ao carregar ícone: {e}")
+        print(f"Erro ao carregar ícone '{filename}' em {path}: {e}")
         placeholder = Image.new('RGBA', (80, 80), (0, 0, 0, 0))
         return ImageTk.PhotoImage(placeholder)
 
+
+# === Atualização da previsão ===
 def atualizar_previsao():
     global forecast_data, day_index, dropdown
     cidade = dropdown.get()
@@ -152,6 +149,8 @@ def atualizar_previsao():
     day_index.set(0)
     mostrar_dia()
 
+
+# === Mostrar o dia atual da previsão ===
 def mostrar_dia():
     global current_language, forecast_data, day_index, forecast_label, icon_label
     if not forecast_data: return
@@ -162,7 +161,7 @@ def mostrar_dia():
     data_formatada = dia["date"]
     hoje = datetime.now().date()
     data_dia = datetime.strptime(data_formatada, "%Y-%m-%d").date()
-    
+
     if data_dia == hoje:
         prefixo = TRANSLATIONS[current_language]["today"]
     elif data_dia == hoje + timedelta(days=1):
@@ -181,27 +180,47 @@ def mostrar_dia():
         icon_label.config(image=icon)
         icon_label.image = icon
 
+
+# === Aplicar tema ===
 def apply_theme(theme):
-    global root, style, title_label, nav_frame, forecast_label, icon_label, btn_anterior, btn_seguinte, botao, copyright_label, theme_frame, theme_slider, language_frame, language_slider
-    
-    if not root: return
-    
+    global root, style, title_label, nav_frame, forecast_label, icon_label, btn_anterior, btn_seguinte, botao
+    global copyright_label, theme_frame, theme_slider, language_frame, dropdown, language_dropdown
+    global top_frame
+
+    if not root:
+        return
+
+    style.theme_use("clam")
     root.config(bg=theme["bg"])
+    top_frame.config(bg=theme["bg"])
     nav_frame.config(bg=theme["bg"])
     title_label.config(bg=theme["bg"], fg=theme["fg"])
     forecast_label.config(bg=theme["bg"], fg=theme["fg"])
     icon_label.config(bg=theme["bg"])
-    style.configure("TCombobox", fieldbackground=theme["combo_bg"], foreground=theme["combo_fg"])
-    btn_anterior.config(bg=theme["btn_bg"], fg=theme["btn_fg"], activebackground=theme["btn_bg"], activeforeground=theme["btn_fg"], highlightbackground=theme["bg"])
-    btn_seguinte.config(bg=theme["btn_bg"], fg=theme["btn_fg"], activebackground=theme["btn_bg"], activeforeground=theme["btn_fg"], highlightbackground=theme["bg"])
-    botao.config(bg=theme["special_btn_bg"], fg=theme["special_btn_fg"], activebackground=theme["special_btn_bg"], activeforeground=theme["special_btn_fg"], highlightbackground=theme["bg"])
-    copyright_label.config(bg=theme["bg"], fg=theme["fg_muted"])
+    btn_anterior.config(bg=theme["btn_bg"], fg=theme["btn_fg"])
+    btn_seguinte.config(bg=theme["btn_bg"], fg=theme["btn_fg"])
     theme_frame.config(bg=theme["bg"], fg=theme["fg"])
-    theme_slider.config(bg=theme["bg"], troughcolor=theme["slider_trough"])
     language_frame.config(bg=theme["bg"], fg=theme["fg"])
-    if language_slider: # Verifica se o slider já existe
-        language_slider.config(bg=theme["bg"], troughcolor=theme["slider_trough"])
+    theme_slider.config(bg=theme["bg"], troughcolor=theme["slider_trough"])
+    copyright_label.config(bg=theme["bg"], fg=theme["fg_muted"])
 
+    style.configure("CustomCombobox.TCombobox",
+                    foreground=theme["combo_fg"],
+                    background=theme["combo_bg"],
+                    fieldbackground=theme["combo_bg"],
+                    arrowcolor=theme["combo_fg"])
+    style.map("CustomCombobox.TCombobox",
+              fieldbackground=[('readonly', theme["combo_bg"])],
+              selectbackground=[('readonly', theme["combo_bg"])],
+              selectforeground=[('readonly', theme["combo_fg"])])
+
+    style.configure("Special.TButton",
+                    foreground=theme["special_btn_fg"],
+                    background=theme["special_btn_bg"],
+                    padding=6)
+
+
+# === Alternar tema ===
 def toggle_theme_by_slider(slider_value):
     global current_theme_name
     value = int(float(slider_value))
@@ -210,10 +229,12 @@ def toggle_theme_by_slider(slider_value):
         current_theme_name = target_theme
         apply_theme(THEMES[current_theme_name])
 
+
+# === Atualizar textos com base no idioma ===
 def update_ui_texts():
-    global root, title_label, btn_anterior, btn_seguinte, botao, theme_frame, language_frame
+    global root, title_label, btn_anterior, btn_seguinte, botao, theme_frame, language_frame, language_dropdown
     if not root: return
-    
+
     root.title(TRANSLATIONS[current_language]["app_title"])
     title_label.config(text=TRANSLATIONS[current_language]["app_title"])
     btn_anterior.config(text=TRANSLATIONS[current_language]["prev_day_button"])
@@ -223,95 +244,93 @@ def update_ui_texts():
     language_frame.config(text=TRANSLATIONS[current_language]["language_label"])
     mostrar_dia()
 
-def toggle_language_by_slider(slider_value):
-    global current_language
-    value = int(float(slider_value))
-    target_lang = "en" if value == 1 else "pt"
-    if target_lang != current_language:
-        current_language = target_lang
-        update_ui_texts()
-        
+
+# === Executar GUI ===
 def run_gui():
-    global root, style, title_label, dropdown, icon_label, forecast_label, nav_frame, btn_anterior, btn_seguinte, botao, copyright_label, theme_frame, theme_slider, language_frame, language_slider, day_index, forecast_data
+    global root, style, title_label, dropdown, icon_label, forecast_label, nav_frame, btn_anterior, btn_seguinte, botao
+    global copyright_label, theme_frame, theme_slider, language_frame, day_index, forecast_data, language_dropdown
+    global top_frame
 
     root = tk.Tk()
     root.title(TRANSLATIONS[current_language]["app_title"])
     root.geometry("400x500")
     root.minsize(400, 500)
-
     style = ttk.Style(root)
 
     title_label = tk.Label(root, text=TRANSLATIONS[current_language]["app_title"], font=("Helvetica", 16, "bold"))
-    title_label.pack(pady=10)
+    title_label.pack(pady=(30, 10))
 
     cidades = listar_cidades()
     nomes_cidades = [c["local"] for c in cidades]
     selected_city = tk.StringVar(value=nomes_cidades[0])
 
-    dropdown = ttk.Combobox(root, textvariable=selected_city, values=nomes_cidades, state="readonly")
-    dropdown.pack(pady=5)
+    top_frame = tk.Frame(root)
+    top_frame.pack(pady=(0, 15))
+
+    dropdown = ttk.Combobox(top_frame, textvariable=selected_city, values=nomes_cidades,
+                            state="readonly", width=25, style="CustomCombobox.TCombobox")
+    dropdown.pack(side=tk.LEFT, padx=5)
+
+    botao = ttk.Button(top_frame, text=TRANSLATIONS[current_language]["fetch_button"],
+                       command=atualizar_previsao, style="Special.TButton")
+    botao.pack(side=tk.LEFT, padx=5)
 
     icon_label = tk.Label(root)
-    icon_label.pack(pady=10)
+    icon_label.pack(pady=(40, 5))
 
     forecast_label = tk.Label(root, text="", font=("Helvetica", 11), justify=tk.CENTER)
-    forecast_label.pack()
+    forecast_label.pack(pady=(5, 20))
 
     day_index = tk.IntVar(value=0)
     forecast_data = []
 
     nav_frame = tk.Frame(root)
-    nav_frame.pack(pady=10)
+    nav_frame.pack(pady=(20, 25))
 
-    btn_anterior = tk.Button(nav_frame, text=TRANSLATIONS[current_language]["prev_day_button"], command=lambda: (day_index.set(day_index.get() - 1), mostrar_dia()) if day_index.get() > 0 else None)
+    btn_anterior = tk.Button(nav_frame, text=TRANSLATIONS[current_language]["prev_day_button"],
+                             command=lambda: (day_index.set(day_index.get() - 1), mostrar_dia()) if day_index.get() > 0 else None)
     btn_anterior.grid(row=0, column=0, padx=5)
 
-    btn_seguinte = tk.Button(nav_frame, text=TRANSLATIONS[current_language]["next_day_button"], command=lambda: (day_index.set(day_index.get() + 1), mostrar_dia()) if forecast_data and day_index.get() < len(forecast_data) - 1 else None)
+    btn_seguinte = tk.Button(nav_frame, text=TRANSLATIONS[current_language]["next_day_button"],
+                             command=lambda: (day_index.set(day_index.get() + 1), mostrar_dia()) if forecast_data and day_index.get() < len(forecast_data) - 1 else None)
     btn_seguinte.grid(row=0, column=1, padx=5)
 
-    botao = tk.Button(root, text=TRANSLATIONS[current_language]["fetch_button"], command=atualizar_previsao, padx=10, pady=5)
-    botao.pack(pady=10)
+    theme_frame = tk.LabelFrame(root, text=TRANSLATIONS[current_language]["theme_label"], font=("Segoe UI", 8))
+    theme_frame.place(relx=0.97, rely=0.97, anchor="se")
+
+    theme_slider = tk.Scale(theme_frame, from_=0, to=1, orient=tk.HORIZONTAL, showvalue=0, length=50,
+                            command=lambda val: toggle_theme_by_slider(val), sliderrelief=tk.FLAT)
+    theme_slider.pack(padx=5, pady=2)
+
+    language_frame = tk.LabelFrame(root, text=TRANSLATIONS[current_language]["language_label"], font=("Segoe UI", 8))
+    language_frame.place(relx=0.03, rely=0.97, anchor="sw")
+
+    lang_var = tk.StringVar(value=current_language)
+    language_dropdown = ttk.Combobox(language_frame, textvariable=lang_var, state="readonly",
+                                     values=["pt", "en"], width=5, style="CustomCombobox.TCombobox")
+    language_dropdown.pack(padx=5, pady=5)
+
+    def on_language_change(event):
+        global current_language
+        selected = lang_var.get()
+        if selected != current_language:
+            current_language = selected
+            update_ui_texts()
+
+    language_dropdown.bind("<<ComboboxSelected>>", on_language_change)
 
     copyright_text = f"WeatherInfoApp © {datetime.now().year}"
     copyright_label = tk.Label(root, text=copyright_text, font=("Segoe UI", 8))
     copyright_label.pack(side=tk.BOTTOM, pady=5)
-    
-    theme_frame = tk.LabelFrame(root, text=TRANSLATIONS[current_language]["theme_label"], font=("Segoe UI", 8))
-    theme_frame.place(relx=0.97, rely=0.97, anchor="se")
 
-    theme_slider = tk.Scale(
-        theme_frame,
-        from_=0, to=1,
-        orient=tk.HORIZONTAL,
-        showvalue=0, length=50,
-        command=lambda val: toggle_theme_by_slider(val),
-        sliderrelief=tk.FLAT
-    )
-    theme_slider.pack(padx=5, pady=2)
-    
-    language_frame = tk.LabelFrame(root, text=TRANSLATIONS[current_language]["language_label"], font=("Segoe UI", 8))
-    language_frame.place(relx=0.03, rely=0.97, anchor="sw")
-
-    lang_labels = tk.Label(language_frame, text=TRANSLATIONS[current_language]["lang_labels"])
-    lang_labels.pack()
-
-    language_slider = tk.Scale(
-        language_frame,
-        from_=0, to=1,
-        orient=tk.HORIZONTAL,
-        showvalue=0, length=50,
-        command=lambda val: toggle_language_by_slider(val),
-        sliderrelief=tk.FLAT
-    )
-    language_slider.set(0) # Inicializa o slider para 'pt'
-    language_slider.pack(padx=5, pady=2)
-
-    apply_theme(THEMES["light"])
+    apply_theme(THEMES[current_theme_name])
     atualizar_previsao()
     root.mainloop()
 
+
+# === Entrada principal ===
 if __name__ == "__main__":
     try:
         run_gui()
     except Exception as e:
-        print(f"Ocorreu um erro fatal: {e}")
+        print(f"Ocorreu um erro: {e}")
